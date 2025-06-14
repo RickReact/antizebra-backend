@@ -5,7 +5,7 @@ import os
 import requests
 
 # Configurar clientes e variáveis de ambiente
-client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+openai.api_key = os.getenv("OPENAI_API_KEY")
 RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY")
 
 app = Flask(__name__)
@@ -79,7 +79,7 @@ Apresente a resposta no seguinte formato:
 🧠 Comentário técnico: [breve explicação técnica do cenário]
 """
 
-        resposta = client.chat.completions.create(
+resposta = openai.ChatCompletion.create(
             model="gpt-4",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
