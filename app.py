@@ -3,7 +3,8 @@ from flask import Flask, request, jsonify
 import openai
 import os
 
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# Inicializa o cliente OpenAI no novo formato
+client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 app = Flask(__name__)
 CORS(app)
@@ -34,13 +35,13 @@ Responda de forma estruturada, profissional e clara para o apostador.
 """
 
     try:
-        resposta = openai.ChatCompletion.create(
+        resposta = client.chat.completions.create(
             model="gpt-4",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
             max_tokens=800
         )
-        resultado = resposta.choices[0].message["content"]
+        resultado = resposta.choices[0].message.content
         return jsonify({"analise": resultado})
 
     except Exception as e:
