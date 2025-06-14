@@ -23,6 +23,28 @@ def buscar_dados_jogo(time_a, time_b):
         return response.json()
     return None
 
+# Função para extrair últimos jogos
+def extrair_ultimos_jogos(dados_json):
+    try:
+        partidas = dados_json.get("api", {}).get("fixtures", [])
+        ultimos = partidas[:5]
+
+        resultados = []
+        for partida in ultimos:
+            home = partida['homeTeam']['team_name']
+            away = partida['awayTeam']['team_name']
+            goals = partida['goalsHomeTeam'], partida['goalsAwayTeam']
+            status = partida['statusShort']
+            
+            if status == "FT":
+                resultado = f"{home} {goals[0]} x {goals[1]} {away}"
+                resultados.append(resultado)
+
+        return resultados
+
+    except Exception as e:
+        return [f"Erro ao extrair dados: {str(e)}"]
+
 @app.route("/analise-jogo", methods=["POST"])
 def analisar_jogo():
     data = request.get_json()
@@ -32,7 +54,6 @@ def analisar_jogo():
         return jsonify({"erro": "Jogo não informado."}), 400
 
     try:
-        # Separar apenas o nome dos times, ignorando a data
         times = jogo.split("x")
         if len(times) < 2:
             raise ValueError("Formato inválido. Use: Time A x Time B – Data")
@@ -44,7 +65,8 @@ def analisar_jogo():
 
         contexto_extra = ""
         if dados_reais:
-            contexto_extra = f"Dados reais encontrados para {time_a} vs {time_b}. Use isso para simular um cenário coerente."
+            ultimos = extrair_ultimos_jogos(dados_reais)
+            contexto_extra = "\n📊 Últimos confrontos:\n" + "\n".join(ultimos)
 
         prompt = f"""
 Você é o ANTIZEBRA PRO MAX – um analista técnico de apostas esportivas.
