@@ -1,12 +1,59 @@
-    prompt = f"""
+from flask_cors import CORS
+from flask import Flask, request, jsonify
+import openai
+import os
+import requests
+
+# Configurar clientes e variáveis de ambiente
+client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY")
+
+app = Flask(__name__)
+CORS(app)
+
+# Função para buscar dados reais do jogo
+def buscar_dados_jogo(time_a, time_b):
+    url = f"https://api-football-v1.p.rapidapi.com/v2/fixtures/headtohead/{time_a}/{time_b}"
+    headers = {
+        "x-rapidapi-host": "api-football-v1.p.rapidapi.com",
+        "x-rapidapi-key": RAPIDAPI_KEY
+    }
+    response = requests.get(url, headers=headers)
+    if response.status_code == 200:
+        return response.json()
+    return None
+
+@app.route("/analise-jogo", methods=["POST"])
+def analisar_jogo():
+    data = request.get_json()
+    jogo = data.get("jogo")
+
+    if not jogo:
+        return jsonify({"erro": "Jogo não informado."}), 400
+
+    try:
+        # Tentativa de extrair nomes dos times
+        partes = jogo.replace("–", "-").split("-")
+        time_a = partes[0].strip().replace(" ", "%20")
+        time_b = partes[1].strip().split()[0].replace(" ", "%20")
+
+        dados_reais = buscar_dados_jogo(time_a, time_b)
+
+        contexto_extra = ""
+        if dados_reais:
+            contexto_extra = f"Dados reais encontrados para {time_a} vs {time_b}. Use isso para simular um cenário coerente."
+
+        prompt = f"""
 Você é o ANTIZEBRA PRO MAX – um analista técnico de apostas esportivas.
 
 Analise a seguinte partida: {jogo}
 
 IMPORTANTE:  
-Mesmo sem acesso a dados em tempo real, você deve SIMULAR a análise com base nas regras do método ANTIZEBRA.
+Mesmo sem acesso completo a todos os dados, use o contexto abaixo para SIMULAR a análise com base nas regras do método ANTIZEBRA.
 
-Só prossiga se houver um favorito com odd entre 1.01 e 1.95. Caso contrário, diga: "❌ Jogo inapto para análise. Nenhum favorito claro identificado."
+{contexto_extra}
+
+1. Só prossiga se houver um favorito com odd entre 1.01 e 1.95. Caso contrário, diga: "❌ Jogo inapto para análise. Nenhum favorito claro identificado."
 
 Se houver favorito, siga os passos:
 
@@ -31,3 +78,18 @@ Apresente a resposta no seguinte formato:
 
 🧠 Comentário técnico: [breve explicação técnica do cenário]
 """
+
+        resposta = client.chat.completions.create(
+            model="gpt-4",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7,
+            max_tokens=800
+        )
+        resultado = resposta.choices[0].message.content
+        return jsonify({"analise": resultado})
+
+    except Exception as e:
+        return jsonify({"erro": str(e)}), 500
+
+if __name__ == "__main__":
+    app.run(host='0.0.0.0', port=10000)
