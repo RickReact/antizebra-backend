@@ -1,3 +1,4 @@
+from flask_cors import CORS
 from flask import Flask, request, jsonify
 import openai
 import os
@@ -5,6 +6,7 @@ import os
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 app = Flask(__name__)
+CORS(app)
 
 @app.route("/analise-jogo", methods=["POST"])
 def analisar_jogo():
