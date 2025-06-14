@@ -1,3 +1,4 @@
+
 from flask_cors import CORS
 from flask import Flask, request, jsonify
 import openai
@@ -35,7 +36,7 @@ def extrair_ultimos_jogos(dados_json):
             away = partida['awayTeam']['team_name']
             goals = partida['goalsHomeTeam'], partida['goalsAwayTeam']
             status = partida['statusShort']
-            
+
             if status == "FT":
                 resultado = f"{home} {goals[0]} x {goals[1]} {away}"
                 resultados.append(resultado)
@@ -66,32 +67,32 @@ def analisar_jogo():
         contexto_extra = ""
         if dados_reais:
             ultimos = extrair_ultimos_jogos(dados_reais)
-            contexto_extra = "\n📊 Últimos confrontos:\n" + "\n".join(ultimos)
+            contexto_extra = "\n📊 Últimos confrontos (dados REAIS):\n" + "\n".join(ultimos)
 
         prompt = f"""
-Você é o ANTIZEBRA PRO MAX – um analista técnico de apostas esportivas.
+Você é o ANTIZEBRA PRO MAX – analista técnico de apostas esportivas, especializado no modelo SRP.
 
-Analise a seguinte partida: {jogo}
-
-IMPORTANTE:  
-Mesmo sem acesso completo a todos os dados, use o contexto abaixo para SIMULAR a análise com base nas regras do método ANTIZEBRA.
+🔒 Você recebeu os seguintes dados REAIS dos últimos confrontos entre os times (API oficial):
 
 {contexto_extra}
 
+📌 Esses dados são reais e foram fornecidos diretamente via API. Use-os na análise abaixo.
+
+Analise a seguinte partida: {jogo}
+
 1. Só prossiga se houver um favorito com odd entre 1.01 e 1.95. Caso contrário, diga: "❌ Jogo inapto para análise. Nenhum favorito claro identificado."
 
-Se houver favorito, siga os passos:
-
+Se houver favorito:
 1. Confirme ou não o favoritismo técnico com base no modelo ANTIZEBRA (SRP).
 2. Classifique o risco: Muito Baixo, Baixo, Moderado, Alto, Muito Alto.
-3. Defina a stake recomendada com base na tabela:
+3. Defina a stake recomendada:
    - Muito Baixo → 5%
    - Baixo → 4%
    - Moderado → 2.5%
    - Alto → 1%
    - Muito Alto → ❌ Não apostar
 
-Apresente a resposta no seguinte formato:
+Apresente a resposta assim:
 
 🎯 Jogo: [Time A x Time B – data]  
 ⭐ Favorito pelo mercado: [Time + Odd]  
@@ -99,9 +100,9 @@ Apresente a resposta no seguinte formato:
 📊 Classificação de Risco: [nível]  
 💰 Stake Recomendada: [%]
 
-📌 Aposta recomendada: [se houver – vitória do favorito]
+📌 Aposta recomendada: [ex: Vitória do favorito]
 
-🧠 Comentário técnico: [breve explicação técnica do cenário]
+🧠 Comentário técnico: [Explicação baseada nos dados reais fornecidos acima]
 """
 
         resposta = openai.ChatCompletion.create(
