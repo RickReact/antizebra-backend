@@ -3,7 +3,6 @@ from flask import Flask, request, jsonify
 import openai
 import os
 
-# Inicializa o cliente OpenAI no novo formato
 client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 app = Flask(__name__)
@@ -18,20 +17,34 @@ def analisar_jogo():
         return jsonify({"erro": "Jogo não informado."}), 400
 
     prompt = f"""
-Você é o ANTIZEBRA PRO MAX – analista técnico de apostas esportivas.
+Você é o ANTIZEBRA PRO MAX – um analista técnico de apostas esportivas.
 
-Analise a seguinte partida: {jogo}
+Analise a partida informada a seguir: {jogo}
 
-REGRAS:
-1. Só faça a análise se houver favorito técnico claro (odd entre 1.01 e 1.95). Caso contrário, diga: "Jogo inapto para análise técnica. Não há favorito claro."
-2. Aplique os 12 critérios técnicos do modelo SRP e classifique o risco: Muito Baixo, Baixo, Moderado, Alto, Muito Alto.
-3. Com base no risco e nas odds, sugira:
-   - Aposta mais segura (menor risco, menor lucro)
-   - Aposta de valor (maior risco, maior lucro)
-   - Aposta equilibrada (risco moderado, bom retorno)
-4. Inclua odd do favorito (simulada se não informada), classificação do risco, stake recomendada (%), e mercados alternativos como BTTS, Over/Under, DNB, etc.
+Regra obrigatória:
+1. Só prossiga se houver um favorito com odd entre 1.01 e 1.95. Caso contrário, diga: "❌ Jogo inapto para análise. Nenhum favorito claro identificado."
 
-Responda de forma estruturada, profissional e clara para o apostador.
+Se houver favorito dentro do critério, aplique o método ANTIZEBRA (SRP) para:
+- Confirmar ou não o favoritismo técnico
+- Classificar o risco da aposta em: Muito Baixo, Baixo, Moderado, Alto, Muito Alto
+- Calcular stake ideal com base na tabela:
+  Muito Baixo → 5%
+  Baixo → 4%
+  Moderado → 2.5%
+  Alto → 1%
+  Muito Alto → ❌ Não apostar
+
+Formate sua resposta da seguinte forma:
+
+🎯 Jogo: [Time A x Time B – data]  
+⭐ Favorito pelo mercado: [Time + Odd]  
+[✅ ou ❌] Favoritismo confirmado pelo ANTIZEBRA  
+📊 Classificação de Risco: [nível]  
+💰 Stake Recomendada: [%]
+
+📌 Aposta recomendada: [se houver – vitória do favorito]
+
+🧠 Comentário técnico: [breve explicação técnica do cenário, sem mercados alternativos]
 """
 
     try:
