@@ -79,7 +79,7 @@ Apresente a resposta no seguinte formato:
 🧠 Comentário técnico: [breve explicação técnica do cenário]
 """
 
-resposta = openai.ChatCompletion.create(
+        resposta = openai.ChatCompletion.create(
             model="gpt-4",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.7,
