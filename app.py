@@ -32,10 +32,13 @@ def analisar_jogo():
         return jsonify({"erro": "Jogo não informado."}), 400
 
     try:
-        # Tentativa de extrair nomes dos times
-        partes = jogo.replace("–", "-").split("-")
-        time_a = partes[0].strip().replace(" ", "%20")
-        time_b = partes[1].strip().split()[0].replace(" ", "%20")
+        # Separar apenas o nome dos times, ignorando a data
+        times = jogo.split("x")
+        if len(times) < 2:
+            raise ValueError("Formato inválido. Use: Time A x Time B – Data")
+
+        time_a = times[0].strip().replace(" ", "%20")
+        time_b = times[1].split()[0].strip().replace(" ", "%20")
 
         dados_reais = buscar_dados_jogo(time_a, time_b)
 
