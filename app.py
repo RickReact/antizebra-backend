@@ -46,19 +46,22 @@ def jogos_por_liga():
     data = req.get("data")
     liga = req.get("liga_id")
 
+    print("➡️ Recebido:", {"data": data, "liga_id": liga})
+
     if not data or not liga:
         return jsonify({"erro": "Data ou ID da liga não fornecidos"}), 400
 
     fixtures = busca_fixtures({"date": data, "league": liga})
-    jogos = []
-    for j in fixtures:
-        jogos.append({
-            "fixture_id": j["fixture"]["id"],
-            "time_casa": j["teams"]["home"]["name"],
-            "time_fora": j["teams"]["away"]["name"],
-            "data": j["fixture"]["date"]
-        })
+    print("➡️ Fixtures retornados:", fixtures)
 
+    jogos = [{
+        "fixture_id": j["fixture"]["id"],
+        "time_casa": j["teams"]["home"]["name"],
+        "time_fora": j["teams"]["away"]["name"],
+        "data": j["fixture"]["date"]
+    } for j in fixtures]
+
+    print("➡️ Jogos enviados:", jogos)
     return jsonify({"jogos": jogos})
 
 @app.route("/analise-jogo", methods=["POST"])
