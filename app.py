@@ -1,18 +1,13 @@
-
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import requests
 import os
-import openai
 
 app = Flask(__name__)
 CORS(app)
 
 RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 API_HOST = "api-football-v1.p.rapidapi.com"
-
-openai.api_key = OPENAI_API_KEY
 
 @app.route("/ligas-por-data", methods=["POST"])
 def ligas_por_data():
@@ -20,7 +15,7 @@ def ligas_por_data():
     if not data:
         return jsonify({"erro": "Data não informada"}), 400
 
-    url = f"https://api-football-v1.p.rapidapi.com/v3/fixtures"
+    url = f"https://{API_HOST}/v3/fixtures"
     params = {"date": data}
     headers = {"x-rapidapi-key": RAPIDAPI_KEY, "x-rapidapi-host": API_HOST}
 
@@ -43,7 +38,7 @@ def jogos_por_liga():
     if not data or not liga:
         return jsonify({"erro": "Data ou ID da liga não fornecidos"}), 400
 
-    url = f"https://api-football-v1.p.rapidapi.com/v3/fixtures"
+    url = f"https://{API_HOST}/v3/fixtures"
     params = {"date": data, "league": liga, "season": "2025"}
     headers = {"x-rapidapi-key": RAPIDAPI_KEY, "x-rapidapi-host": API_HOST}
 
@@ -55,12 +50,12 @@ def jogos_por_liga():
     if not resp:
         return jsonify({"jogos": []})
 
-    jogos = [{
-        "fixture_id": j["fixture"]["id"],
-        "time_casa": j["teams"]["home"]["name"],
-        "time_fora": j["teams"]["away"]["name"],
-        "data": j["fixture"]["date"]
-    } for j in resp]
+    jogos = [dict(
+        fixture_id=j["fixture"]["id"],
+        time_casa=j["teams"]["home"]["name"],
+        time_fora=j["teams"]["away"]["name"],
+        data=j["fixture"]["date"]
+    ) for j in resp]
 
     return jsonify({"jogos": jogos})
 
@@ -71,43 +66,72 @@ def analise_jogo():
     if not fid:
         return jsonify({"erro": "ID da partida não fornecido"}), 400
 
-    url = f"https://api-football-v1.p.rapidapi.com/v3/fixtures"
-    params = {"id": fid}
+    url = f"https://{API_HOST}/v3/odds"
     headers = {"x-rapidapi-key": RAPIDAPI_KEY, "x-rapidapi-host": API_HOST}
+    params = {"fixture": fid}
 
-    r = requests.get(url, headers=headers, params=params)
-    if r.status_code != 200 or not r.json().get("response"):
-        return jsonify({"erro": "Erro ao buscar partida por ID"}), 500
+    odds_resp = requests.get(url, headers=headers, params=params)
+    if odds_resp.status_code != 200 or not odds_resp.json().get("response"):
+        return jsonify({"erro": "Odds não disponíveis para este jogo"}), 404
 
-    jogo = r.json()["response"][0]
-    timeA = jogo["teams"]["home"]["name"]
-    timeB = jogo["teams"]["away"]["name"]
-    data_jogo = jogo["fixture"]["date"]
-    odd_favorito = 1.80  # Simulado
+    odds_data = odds_resp.json()["response"][0]["bookmakers"][0]["bets"]
+    odd_fav = None
+    odd_btts = None
+    odd_ht = None
 
-    prompt = f'''
-Você é o ANTIZEBRA PRO MAX – analista técnico de apostas.
+    for bet in odds_data:
+        if bet["name"] == "Match Winner":
+            for val in bet["values"]:
+                if val["odd"] and float(val["odd"]) < 1.96:
+                    odd_fav = float(val["odd"])
+        if bet["name"] == "Both Teams To Score":
+            for val in bet["values"]:
+                if val["value"] == "Yes":
+                    odd_btts = float(val["odd"])
+        if bet["name"] == "1st Half Winner":
+            for val in bet["values"]:
+                if val["odd"] and float(val["odd"]) < 1.96:
+                    odd_ht = float(val["odd"])
 
-🎯 Jogo: {timeA} x {timeB} – {data_jogo}
-⭐ Favorito simulado: {timeA if odd_favorito <= 1.95 else timeB} (odd {odd_favorito})
+    if not odd_fav:
+        return jsonify({"erro": "❌ Jogo inapto para análise. Nenhum favorito claro identificado."})
 
-Avalie com base no método SRP se há risco de zebra, classifique o risco, e defina a stake ideal.
+    # Cálculo de risco SRP simplificado com critérios de peso
+    risco = 20
+    if odd_fav <= 1.25: risco += 1
+    elif odd_fav <= 1.50: risco += 3
+    else: risco += 5
 
-Stake máxima: 5%. Não recomende aposta se o risco for Muito Alto.
-'''
+    if odd_btts and odd_btts >= 2.00: risco += 3
+    if odd_ht and odd_ht < 1.95: risco -= 2
 
-    try:
-        resposta = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.6,
-            max_tokens=800
-        )
-        analise = resposta.choices[0].message.content
-    except Exception as e:
-        return jsonify({"erro": f"Erro ao gerar análise: {str(e)}"}), 500
+    if risco <= 39:
+        nivel = "🎯 Muito Baixo"
+        stake = "5%"
+    elif risco <= 56:
+        nivel = "🟢 Baixo"
+        stake = "4%"
+    elif risco <= 74:
+        nivel = "🟡 Moderado"
+        stake = "2.5%"
+    elif risco <= 91:
+        nivel = "🔴 Alto"
+        stake = "1%"
+    else:
+        nivel = "🚫 Muito Alto"
+        stake = "0%"
 
-    return jsonify({"analise": analise})
+    resumo = f"""
+🎯 Fixture ID: {fid}
+⭐ Odd do favorito: {odd_fav}
+⚙️ Odd BTTS: {odd_btts}
+⏱️ Odd vitória 1º tempo: {odd_ht}
+
+📊 Classificação de Risco: {nivel}
+💰 Stake Recomendada: {stake}
+"""
+
+    return jsonify({"analise": resumo.strip()})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
