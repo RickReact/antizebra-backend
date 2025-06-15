@@ -1,8 +1,8 @@
-
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import requests
 import os
+from datetime import datetime
 
 app = Flask(__name__)
 CORS(app)
@@ -42,12 +42,12 @@ def jogos_por_liga():
     if not data or not liga:
         return jsonify({"erro": "Data ou ID da liga não fornecidos"}), 400
 
+    ano = datetime.strptime(data, "%Y-%m-%d").year
     url = f"https://{API_HOST}/v3/fixtures"
-    params = {"date": data, "league": liga, "season": "2025"}
+    params = {"date": data, "league": liga, "season": str(ano)}
     headers = {"x-rapidapi-key": RAPIDAPI_KEY, "x-rapidapi-host": API_HOST}
 
     r = requests.get(url, headers=headers, params=params)
-
     print("🔹 Debug status code:", r.status_code)
     print("🔹 Debug resp body:", r.text)
 
