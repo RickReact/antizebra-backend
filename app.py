@@ -42,7 +42,7 @@ def jogos_por_liga():
     liga_id = data_json.get("liga_id")
 
     url = "https://api-football-v1.p.rapidapi.com/v3/fixtures"
-    query = {"date": data, "league": liga_id, "season": "2024"}
+    query = {"date": data, "league": liga_id, "season": "2025"}
 
     response = requests.get(url, headers=HEADERS, params=query)
     if response.status_code != 200:
