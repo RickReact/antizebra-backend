@@ -2,7 +2,8 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import requests
 import os
-from datetime import datetime
+from datetime import datetime, timezone
+import openai
 
 app = Flask(__name__)
 CORS(app)
@@ -10,6 +11,7 @@ CORS(app)
 RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY")
 OPENAI_KEY = os.getenv("OPENAI_API_KEY")
 API_HOST = "api-football-v1.p.rapidapi.com"
+openai.api_key = OPENAI_KEY
 
 def busca_fixtures(filtros):
     url = f"https://{API_HOST}/v3/fixtures"
@@ -68,9 +70,6 @@ def jogos_por_liga():
 
 @app.route("/analise-jogo", methods=["POST"])
 def analise_jogo():
-    import openai
-    openai.api_key = OPENAI_KEY
-
     req = request.get_json()
     fid = req.get("fixture_id")
     if not fid:
@@ -93,14 +92,11 @@ def analise_jogo():
     fixture = dados[0]
     timeA = fixture["teams"]["home"]["name"]
     timeB = fixture["teams"]["away"]["name"]
-
-    from datetime import datetime, timezone
     game_time_str = fixture["fixture"]["date"]
     game_time = datetime.fromisoformat(game_time_str.replace("Z", "+00:00"))
     now = datetime.now(timezone.utc)
 
-    status_ok = game_time > now
-    if not status_ok:
+    if game_time <= now:
         return jsonify({"erro": "⏸️ Esta partida já começou ou foi encerrada. Análises são feitas apenas no pré-jogo."}), 400
 
     prompt = f"""
@@ -115,5 +111,6 @@ Aplique o Método SRP (Sistema de Risco Ponderado) e apresente uma avaliação d
     )
 
     return jsonify({"analise": resposta.choices[0].message["content"].strip()})
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
