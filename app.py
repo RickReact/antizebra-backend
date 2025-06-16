@@ -68,8 +68,9 @@ def jogos_por_liga():
 
 @app.route("/analise-jogo", methods=["POST"])
 def analise_jogo():
-    from openai import OpenAI
-    openai = OpenAI(api_key=OPENAI_KEY)
+    import openai
+    openai.api_key = OPENAI_KEY
+
 
     req = request.get_json()
     fid = req.get("fixture_id")
@@ -104,7 +105,7 @@ Analise a partida {timeA} x {timeB}. A partida tem status válido para análise:
 Forneça uma avaliação de risco conforme o Método SRP e indique uma stake segura ou se deve evitar aposta.
 """
 
-    resposta = openai.chat.completions.create(
+    resposta = openai.ChatCompletion.create(
         model="gpt-4",
         messages=[{"role": "user", "content": prompt}]
     )
