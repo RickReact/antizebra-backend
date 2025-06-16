@@ -1,26 +1,14 @@
-
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import requests
 import os
+from datetime import datetime
 
 app = Flask(__name__)
 CORS(app)
 
 RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY")
-OPENAI_KEY = os.getenv("OPENAI_API_KEY")
 API_HOST = "api-football-v1.p.rapidapi.com"
-
-def busca_fixtures(filtros):
-    url = f"https://{API_HOST}/v3/fixtures"
-    headers = {
-        "x-rapidapi-key": RAPIDAPI_KEY,
-        "x-rapidapi-host": API_HOST
-    }
-    response = requests.get(url, headers=headers, params=filtros)
-    if response.status_code != 200:
-        return []
-    return response.json().get("response", [])
 
 @app.route("/ligas-por-data", methods=["POST"])
 def ligas_por_data():
@@ -28,15 +16,18 @@ def ligas_por_data():
     if not data:
         return jsonify({"erro": "Data não informada"}), 400
 
-    fixtures = busca_fixtures({"date": data})
+    url = f"https://{API_HOST}/v3/fixtures"
+    params = {"date": data}
+    headers = {"x-rapidapi-key": RAPIDAPI_KEY, "x-rapidapi-host": API_HOST}
+
+    r = requests.get(url, headers=headers, params=params)
+    if r.status_code != 200:
+        return jsonify({"erro": "Erro ao buscar partidas"}), 500
+
     ligas = {}
-    for item in fixtures:
+    for item in r.json().get("response", []):
         league = item["league"]
-        ligas[league["id"]] = {
-            "id": league["id"],
-            "nome": league["name"],
-            "pais": league["country"]
-        }
+        ligas[league["id"]] = {"id": league["id"], "nome": league["name"], "pais": league["country"]}
 
     return jsonify({"ligas": list(ligas.values())})
 
@@ -46,68 +37,110 @@ def jogos_por_liga():
     data = req.get("data")
     liga = req.get("liga_id")
 
-    print("➡️ Recebido:", {"data": data, "liga_id": liga})
-
     if not data or not liga:
         return jsonify({"erro": "Data ou ID da liga não fornecidos"}), 400
 
-    fixtures = busca_fixtures({"date": data, "league": liga})
-    print("➡️ Fixtures retornados:", fixtures)
+    try:
+        ano = datetime.strptime(data, "%Y-%m-%d").year
+    except ValueError:
+        return jsonify({"erro": "Data em formato inválido"}), 400
+
+    url = f"https://{API_HOST}/v3/fixtures"
+    params = {"date": data, "league": liga, "season": str(ano)}
+    headers = {"x-rapidapi-key": RAPIDAPI_KEY, "x-rapidapi-host": API_HOST}
+
+    r = requests.get(url, headers=headers, params=params)
+    if r.status_code != 200:
+        return jsonify({"erro": "Erro na API de partidas"}), 500
+
+    resp = r.json().get("response", [])
+    if not resp:
+        return jsonify({"jogos": []})
 
     jogos = [{
         "fixture_id": j["fixture"]["id"],
         "time_casa": j["teams"]["home"]["name"],
         "time_fora": j["teams"]["away"]["name"],
         "data": j["fixture"]["date"]
-    } for j in fixtures]
+    } for j in resp]
 
-    print("➡️ Jogos enviados:", jogos)
     return jsonify({"jogos": jogos})
 
 @app.route("/analise-jogo", methods=["POST"])
 def analise_jogo():
-    from openai import OpenAI
-    openai = OpenAI(api_key=OPENAI_KEY)
-
     req = request.get_json()
     fid = req.get("fixture_id")
     if not fid:
         return jsonify({"erro": "ID da partida não fornecido"}), 400
 
-    url_fixture = f"https://{API_HOST}/v3/fixtures"
-    headers = {
-        "x-rapidapi-key": RAPIDAPI_KEY,
-        "x-rapidapi-host": API_HOST
-    }
+    url = f"https://{API_HOST}/v3/odds"
+    headers = {"x-rapidapi-key": RAPIDAPI_KEY, "x-rapidapi-host": API_HOST}
+    params = {"fixture": fid}
 
-    detalhes = requests.get(url_fixture, headers=headers, params={"id": fid})
-    if detalhes.status_code != 200:
-        return jsonify({"erro": "Erro ao buscar detalhes da partida"}), 500
+    odds_resp = requests.get(url, headers=headers, params=params)
+    if odds_resp.status_code != 200 or not odds_resp.json().get("response"):
+        return jsonify({"erro": "Odds não disponíveis para este jogo"}), 404
 
-    dados = detalhes.json().get("response", [])
-    if not dados:
-        return jsonify({"erro": "Partida não encontrada"}), 404
+    bookmakers = odds_resp.json()["response"][0].get("bookmakers", [])
+    odd_fav = None
+    odd_btts = None
+    odd_ht = None
 
-    fixture = dados[0]
-    timeA = fixture["teams"]["home"]["name"]
-    timeB = fixture["teams"]["away"]["name"]
-    elapsed = fixture.get("fixture", {}).get("status", {}).get("elapsed")
-    venceu_casa = fixture["teams"]["home"].get("winner")
+    for bookmaker in bookmakers:
+        for bet in bookmaker.get("bets", []):
+            if bet.get("name") == "Match Winner":
+                for val in bet.get("values", []):
+                    odd = val.get("odd")
+                    if odd and float(odd) < 1.96:
+                        odd_fav = float(odd)
+            elif bet.get("name") == "Both Teams To Score" and odd_btts is None:
+                for val in bet.get("values", []):
+                    if val.get("value") == "Yes":
+                        odd_btts = float(val.get("odd", 0))
+            elif bet.get("name") == "1st Half Winner" and odd_ht is None:
+                for val in bet.get("values", []):
+                    odd = val.get("odd")
+                    if odd and float(odd) < 1.96:
+                        odd_ht = float(odd)
 
-    status_ok = venceu_casa or (isinstance(elapsed, int) and elapsed < 90)
+    if not odd_fav:
+        return jsonify({"erro": "❌ Jogo inapto para análise. Nenhum favorito claro identificado."})
 
-    prompt = f"""
-Você é o ANTIZEBRA PRO MAX - um analista técnico de apostas esportivas.
-Analise a partida {timeA} x {timeB}. A partida tem status válido para análise: {status_ok}.
-Forneça uma avaliação de risco conforme o Método SRP e indique uma stake segura ou se deve evitar aposta.
+    risco = 20
+    if odd_fav <= 1.25: risco += 1
+    elif odd_fav <= 1.50: risco += 3
+    else: risco += 5
+
+    if odd_btts and odd_btts >= 2.00: risco += 3
+    if odd_ht and odd_ht < 1.95: risco -= 2
+
+    if risco <= 39:
+        nivel = "🎯 Muito Baixo"
+        stake = "5%"
+    elif risco <= 56:
+        nivel = "🟢 Baixo"
+        stake = "4%"
+    elif risco <= 74:
+        nivel = "🟡 Moderado"
+        stake = "2.5%"
+    elif risco <= 91:
+        nivel = "🔴 Alto"
+        stake = "1%"
+    else:
+        nivel = "🚫 Muito Alto"
+        stake = "0%"
+
+    resumo = f"""
+🎯 Fixture ID: {fid}
+⭐ Odd do favorito: {odd_fav}
+⚙️ Odd BTTS: {odd_btts}
+⏱️ Odd vitória 1º tempo: {odd_ht}
+
+📊 Classificação de Risco: {nivel}
+💰 Stake Recomendada: {stake}
 """
 
-    resposta = openai.chat.completions.create(
-        model="gpt-4",
-        messages=[{"role": "user", "content": prompt}]
-    )
-
-    return jsonify({"analise": resposta.choices[0].message.content.strip()})
+    return jsonify({"analise": resumo.strip()})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
