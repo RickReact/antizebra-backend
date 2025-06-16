@@ -71,7 +71,6 @@ def analise_jogo():
     import openai
     openai.api_key = OPENAI_KEY
 
-
     req = request.get_json()
     fid = req.get("fixture_id")
     if not fid:
@@ -94,15 +93,20 @@ def analise_jogo():
     fixture = dados[0]
     timeA = fixture["teams"]["home"]["name"]
     timeB = fixture["teams"]["away"]["name"]
-    elapsed = fixture.get("fixture", {}).get("status", {}).get("elapsed")
-    venceu_casa = fixture["teams"]["home"].get("winner")
 
-    status_ok = venceu_casa or (isinstance(elapsed, int) and elapsed < 90)
+    from datetime import datetime, timezone
+    game_time_str = fixture["fixture"]["date"]
+    game_time = datetime.fromisoformat(game_time_str.replace("Z", "+00:00"))
+    now = datetime.now(timezone.utc)
+
+    status_ok = game_time > now
+    if not status_ok:
+        return jsonify({"erro": "⏸️ Esta partida já começou ou foi encerrada. Análises são feitas apenas no pré-jogo."}), 400
 
     prompt = f"""
 Você é o ANTIZEBRA PRO MAX - um analista técnico de apostas esportivas.
-Analise a partida {timeA} x {timeB}. A partida tem status válido para análise: {status_ok}.
-Forneça uma avaliação de risco conforme o Método SRP e indique uma stake segura ou se deve evitar aposta.
+Analise a partida {timeA} x {timeB}. A partida ainda não começou e está apta para análise.
+Aplique o Método SRP (Sistema de Risco Ponderado) e apresente uma avaliação de risco, incluindo uma sugestão de stake ou se deve evitar aposta.
 """
 
     resposta = openai.ChatCompletion.create(
@@ -110,7 +114,6 @@ Forneça uma avaliação de risco conforme o Método SRP e indique uma stake seg
         messages=[{"role": "user", "content": prompt}]
     )
 
-    return jsonify({"analise": resposta.choices[0].message.content.strip()})
-
+    return jsonify({"analise": resposta.choices[0].message["content"].strip()})
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
